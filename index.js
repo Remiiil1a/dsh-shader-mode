@@ -15,9 +15,11 @@
  */
 
 import { createBoards, registerLeadTools } from './tools.js'
+import { mountLeadGuard } from './guard.js'
+import { mountLeadSection } from './lead.js'
 
 /** Services this row needs before it can activate. */
-export const inject = ['tools', 'subagents']
+export const inject = ['tools', 'subagents', 'systemPrompt']
 
 /**
  * Resolve the row's configuration.
@@ -34,6 +36,9 @@ export function resolveConfig(config) {
 		// Undefined keeps the built-in policy; an array replaces it, so a profile
 		// can add a skill this package has not heard of.
 		leadOnlySkills: Array.isArray(raw.leadOnlySkills) ? raw.leadOnlySkills : undefined,
+		// The guard is on by default: the first real session showed that a rule
+		// in a prompt loses to momentum, so the reminder is a mechanism.
+		remindOnDirectEdit: raw.remindOnDirectEdit !== false,
 	}
 }
 
@@ -48,5 +53,7 @@ export function apply(ctx, config) {
 	const resolved = resolveConfig(config)
 	const boards = createBoards()
 	ctx.effect(() => () => boards.clear(), 'shader-mode: dispatch board')
+	mountLeadSection(ctx, resolved)
 	registerLeadTools(ctx, resolved, boards)
+	mountLeadGuard(ctx, boards, resolved)
 }

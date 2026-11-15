@@ -13,6 +13,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { Board, BoardRegistry } from '../lib/board.js'
+import { isMutatingTool, mountLeadGuard, reminderText } from '../guard.js'
+import { leadSectionText } from '../lead.js'
 import {
 	DEFAULT_LEAD_ONLY_SKILLS,
 	checkSkillAssignment,
@@ -391,4 +393,95 @@ test('a configured policy replaces the default', async () => {
 		() => dispatch.execute({ title: 't', brief: 'b', acceptance: 'a', skills: ['my-solo-flow'] }, exec()),
 		(error) => error instanceof ShaderModeError && error.code === 'SKILL_ROLE_CONFLICT',
 	)
+})
+
+test('the lead section states the four rules without needing a skill load', () => {
+	const text = leadSectionText({ workerPreset: 'shader-worker' })
+	// The rule that was missing in the first real session.
+	assert.match(text, /Every unit of work goes to a worker/)
+	assert.match(text, /shader_dispatch/)
+	assert.match(text, /Name the skills the worker must load/)
+	assert.match(text, /Read the project's own workflow/)
+	assert.match(text, /Judge the report/)
+	// It must say what the lead may still do, or it reads as "do nothing".
+	assert.match(text, /Reading, searching, and inspecting/)
+	// And it must name the worker preset it dispatches to.
+	assert.match(text, /shader-worker/)
+})
+
+test('the guard recognises the tools that change the project', () => {
+	for (const name of ['edit', 'write', 'apply_patch', 'pwsh', 'bash']) {
+		assert.equal(isMutatingTool(name), true, `${name} changes the project`)
+	}
+	for (const name of ['read', 'grep', 'glob', 'shader_dispatch', 'shader_board', 'skill', 'ask_user_question']) {
+		assert.equal(isMutatingTool(name), false, `${name} does not change the project`)
+	}
+})
+
+test('the reminder names the tool and the next step', () => {
+	const idle = reminderText('edit', 0)
+	assert.match(idle, /`edit`/)
+	assert.match(idle, /No task is open/)
+	assert.match(idle, /shader_dispatch/)
+	assert.match(idle, /Reading, searching, and inspecting are yours/)
+
+	const busy = reminderText('pwsh', 2)
+	assert.match(busy, /2 open task/)
+	assert.match(busy, /send the worker a message/)
+})
+
+test('the guard attaches a note to a successful mutating call', async () => {
+	const handlers = []
+	const ctx = {
+		on(event, handler) {
+			if (event === 'tools/post-execute') handlers.push(handler)
+			return () => {}
+		},
+	}
+	const boards = new BoardRegistry()
+	mountLeadGuard(ctx, boards, { remindOnDirectEdit: true })
+	assert.equal(handlers.length, 1)
+
+	const handler = handlers[0]
+	const result = { isError: false, content: [{ type: 'text', text: 'file written' }] }
+	const decision = await handler(
+		{ name: 'edit', agent: { id: 'lead-1' } },
+		result,
+		async () => ({ kind: 'accept' }),
+	)
+	assert.equal(decision.kind, 'accept')
+	assert.equal(decision.content.length, 2)
+	assert.match(decision.content[1].text, /you just used `edit` yourself/)
+})
+
+test('the guard stays quiet for reads, failures, and non-lead calls', async () => {
+	const handlers = []
+	const ctx = {
+		on(_event, handler) {
+			handlers.push(handler)
+			return () => {}
+		},
+	}
+	mountLeadGuard(ctx, new BoardRegistry(), { remindOnDirectEdit: true })
+	const handler = handlers[0]
+	const accept = async () => ({ kind: 'accept' })
+
+	// A read is not work.
+	assert.deepEqual(await handler({ name: 'read', agent: { id: 'a' } }, { isError: false }, accept), { kind: 'accept' })
+	// A failed edit is not work done.
+	assert.deepEqual(await handler({ name: 'edit', agent: { id: 'a' } }, { isError: true }, accept), { kind: 'accept' })
+	// A call with no agent is not a lead call.
+	assert.deepEqual(await handler({ name: 'edit' }, { isError: false }, accept), { kind: 'accept' })
+	// A blocked decision is left alone.
+	assert.deepEqual(
+		await handler({ name: 'edit', agent: { id: 'a' } }, { isError: false }, async () => ({ kind: 'block', feedback: [] })),
+		{ kind: 'block', feedback: [] },
+	)
+})
+
+test('the guard can be turned off', () => {
+	const handlers = []
+	const ctx = { on(_event, handler) { handlers.push(handler); return () => {} } }
+	mountLeadGuard(ctx, new BoardRegistry(), { remindOnDirectEdit: false })
+	assert.equal(handlers.length, 0)
 })

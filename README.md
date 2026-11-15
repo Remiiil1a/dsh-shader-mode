@@ -18,12 +18,36 @@ The split is enforced by the composition, not by instructions:
 | | `shader-lead` | `shader-worker` |
 |---|---|---|
 | `shader_dispatch` / `shader_board` / `shader_route` | yes | **no** |
+| lead standing instructions (system prompt) | yes | **no** |
 | worker standing instructions | **no** | yes |
 | bundled shader-mode skills | no | yes |
 | talks to the user | yes | **no** |
 
 A worker cannot dispatch because the tool is not in its catalog. A lead cannot
 pick up the worker's instructions because they are mounted on the other preset.
+
+### The rule is a prompt section, not a skill
+
+This matters more than it looks. A skill is loaded on demand: the model has to
+decide to call `skill` before its rules exist. The first real shader-mode
+session proved the failure mode — the preset was active, `shader_dispatch` was
+in the tool list, and the lead made 50 `edit` calls and 73 `pwsh` calls without
+ever calling `skill` once. The workflow skill never entered its context.
+
+So the four rules live in a **system-prompt section** (`shader-mode:lead`),
+assembled into every model step. The skills still carry the detail; the section
+carries the part that must not be missable.
+
+### The guard
+
+A rule in a prompt is advice, and advice loses to momentum. When the lead calls
+a mutating tool (`edit`, `write`, `pwsh`, …) the call is allowed but a
+corrective note is attached to the result, naming the tool and the next step.
+
+It deliberately does not block. A lead sometimes has a real reason to touch a
+file — reading back a worker's output, fixing its own dispatch text. Blocking
+would turn a nudge into an obstacle and teach the lead to route around the
+plugin. Turn it off with `remindOnDirectEdit: false`.
 
 ## Install
 
@@ -165,6 +189,7 @@ The `shader-mode` row in `cordis.patch.yml`:
 | `workerPreset` | `shader-worker` | Preset every dispatched worker runs on. |
 | `maxDepth` | `0` | Delegation depth handed to each worker. `0` makes workers leaves, which keeps the lead in charge of the shape of the work. |
 | `leadOnlySkills` | built-in list | Skills that must not be assigned to a worker. Omit to keep the default (`shader-single`, `shader-single-strict`, `shader-team-lead`); supply an array to replace it. |
+| `remindOnDirectEdit` | `true` | Attach a corrective note when the lead edits a file or runs a command itself. |
 
 ## Tests
 

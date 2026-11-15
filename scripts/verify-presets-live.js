@@ -114,9 +114,14 @@ async function mountPreset(ctx, row) {
 const lead = await boot()
 await mountPreset(lead.ctx, leadRow)
 assert.deepEqual([...lead.tools.keys()].sort(), ['shader_board', 'shader_dispatch', 'shader_route'])
-assert.equal(lead.sections.length, 0, 'the lead must not mount the worker section')
+// The lead section is the rule that must survive a session that never loads a
+// skill, so its presence is part of "the preset mounted correctly".
+assert.equal(lead.sections.length, 1, 'the lead mounts exactly one prompt section')
+assert.equal(lead.sections[0].name, 'shader-mode:lead')
+assert.match(lead.sections[0].text, /Every unit of work goes to a worker/)
 assert.equal(lead.providers.length, 0, 'the lead must not mount the worker skill provider')
 console.log(`lead   tools: ${[...lead.tools.keys()].join(', ')}`)
+console.log(`lead   section: ${lead.sections[0].name}`)
 
 const worker = await boot()
 await mountPreset(worker.ctx, workerRow)

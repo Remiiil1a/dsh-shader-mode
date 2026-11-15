@@ -12,8 +12,7 @@
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg",
     "./package.json": "./package.json"
-  },
-  "dsh": {
+  },  "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
@@ -23,8 +22,11 @@
     "worker.js",
     "skills.js",
     "tools.js",
+    "lead.js",
+    "guard.js",
     "lib/tool.js",
     "lib/board.js",
+    "lib/skill-policy.js",
     "cordis.patch.yml",
     "icon.svg",
     "README.md",

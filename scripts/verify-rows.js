@@ -19,25 +19,30 @@ async function load(specifier) {
 const lead = await load('dsh-shader-mode')
 assert.equal(typeof lead.apply, 'function', 'lead row must export apply')
 assert.ok(Array.isArray(lead.inject), 'lead row must declare inject')
-assert.deepEqual(lead.inject, ['tools', 'subagents'])
+assert.deepEqual(lead.inject, ['tools', 'subagents', 'systemPrompt'])
 assert.deepEqual(lead.resolveConfig({}), {
 	workerPreset: 'shader-worker',
 	maxDepth: 0,
 	leadOnlySkills: undefined,
+	remindOnDirectEdit: true,
 })
 assert.deepEqual(lead.resolveConfig({ workerPreset: 'custom', maxDepth: 2 }), {
 	workerPreset: 'custom',
 	maxDepth: 2,
 	leadOnlySkills: undefined,
+	remindOnDirectEdit: true,
 })
 assert.deepEqual(lead.resolveConfig({ workerPreset: '', maxDepth: -1 }), {
 	workerPreset: 'shader-worker',
 	maxDepth: 0,
 	leadOnlySkills: undefined,
+	remindOnDirectEdit: true,
 })
 // A configured policy replaces the built-in one; a non-array is ignored.
 assert.deepEqual(lead.resolveConfig({ leadOnlySkills: ['a'] }).leadOnlySkills, ['a'])
 assert.equal(lead.resolveConfig({ leadOnlySkills: 'nope' }).leadOnlySkills, undefined)
+// The guard is on unless explicitly disabled.
+assert.equal(lead.resolveConfig({ remindOnDirectEdit: false }).remindOnDirectEdit, false)
 console.log('ok  dsh-shader-mode          apply + inject + resolveConfig')
 
 const worker = await load('dsh-shader-mode/worker')
