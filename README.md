@@ -67,10 +67,45 @@ Starts one worker on the `shader-worker` preset and returns its id immediately.
 | `workflow` | no | The project's own procedure, quoted. |
 | `context` | no | Facts the worker cannot look up. |
 | `cwd` | no | Working directory; defaults to the current one. |
+| `allowLeadOnly` | no | Override the skill-role policy for this one dispatch. |
 
 The skill assignment is written into the worker prompt as an instruction, not a
 hint. A dispatch with no skills is refused: a task whose process you have not
 decided is a task you have not finished planning.
+
+### A skill must fit the role
+
+More skills is not better. A skill is written for a *role*, and assigning one
+written for a different role does not make the worker better — it makes the
+worker try to be the lead, and the failure is quiet: the report comes back
+looking complete.
+
+`shader_dispatch` refuses three kinds by name:
+
+| Kind | Why it breaks | Blocked by default |
+|---|---|---|
+| Whole-project flows | Start at requirement freezing, which needs a user. A worker has no user, so it invents the requirements and reports them as settled. | `shader-single`, `shader-single-strict` |
+| Orchestrators | Create their own teammates and task board. A worker that loads one starts a second team underneath the lead. | `shader-team-lead` |
+| User-facing roles | Anything whose job is to talk to the user, freeze requirements, or accept delivery. | (covered by the two above) |
+
+The refusal names the skill, says why, and names the role skill to use instead.
+`allowLeadOnly: true` overrides it for the real case where the lead has already
+done the user-facing part and written it down — not as a way to silence the
+check.
+
+The role skills are the ones written for exactly this split, and they stay
+assignable:
+
+| Skill | Assign it when |
+|---|---|
+| `shader-team-architect` | Turning a visual goal into math, a uniform contract, and a performance budget. |
+| `shader-team-programmer` | Implementing against a frozen contract. |
+| `shader-team-reviewer` | Independent verification; reports problems, does not fix them. |
+| `shader-team-scribe` | Logging, git, archiving. |
+| `shader-glsl` | Technique library — noise, SDF, warping, transitions. Safe for any worker. |
+
+Process skills (`ds-plan-loop`, `ds-verify-loop`, `ds-tdd`, `ds-review-loop`,
+`ds-unstick`) are role-neutral and fit any worker.
 
 ### `shader_board`
 
@@ -129,6 +164,7 @@ The `shader-mode` row in `cordis.patch.yml`:
 |---|---|---|
 | `workerPreset` | `shader-worker` | Preset every dispatched worker runs on. |
 | `maxDepth` | `0` | Delegation depth handed to each worker. `0` makes workers leaves, which keeps the lead in charge of the shape of the work. |
+| `leadOnlySkills` | built-in list | Skills that must not be assigned to a worker. Omit to keep the default (`shader-single`, `shader-single-strict`, `shader-team-lead`); supply an array to replace it. |
 
 ## Tests
 

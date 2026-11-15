@@ -51,6 +51,14 @@
             config:
               workerPreset: shader-worker
               maxDepth: 0
+              # Skills that must not be assigned to a worker, because they are
+              # written for a different role: a whole-project flow that starts
+              # by freezing requirements with a user, or an orchestrator that
+              # creates its own team. Omit this key to keep the built-in list
+              # (shader-single, shader-single-strict, shader-team-lead); supply
+              # an array to replace it, e.g. to add a skill this package has
+              # not heard of.
+              # leadOnlySkills: []
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:

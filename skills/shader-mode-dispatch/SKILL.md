@@ -44,6 +44,11 @@ correct looks like. See `shader-mode-workflow` for the catalog and how to choose
 The tool refuses a dispatch with no skills. That is not a formality: a task whose
 process you have not decided is a task you have not finished planning.
 
+It also refuses a dispatch naming a skill written for a different role — a
+whole-project flow, an orchestrator, or a user-facing role. Those skills assume
+a user to freeze requirements with or a team to create, and a worker has
+neither. The refusal names the skill and the role skill to use instead.
+
 ### `acceptance` — how you will judge it
 
 Write the check, not the goal. The test: could someone else run this and get a
@@ -85,8 +90,11 @@ skills: [shader-single]
 acceptance: It looks right.
 ```
 
-The worker will guess which boundary, guess which file, guess what "right" means,
-and report success. You will have no way to disagree.
+Three things are wrong here. The brief names no file and no constraint, so the
+worker guesses. The acceptance is not checkable, so you cannot disagree with the
+result. And `shader-single` is a whole-project flow that starts by freezing
+requirements with a user — the worker has no user, so it will invent them. The
+dispatch is refused before it starts.
 
 **Workable:**
 
@@ -104,7 +112,7 @@ brief: |
   also vertical faces in water, and their refraction is wanted.
 
   Do not touch the Snell window work; it was removed deliberately.
-skills: [shader-single-strict, ds-verify-loop]
+skills: [shader-team-programmer, ds-verify-loop]
 acceptance: |
   The file compiles under the project's frontend stage with 0 errors, and the
   project's full chain exits 0 with the same reading counts as the previous

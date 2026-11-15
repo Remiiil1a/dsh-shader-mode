@@ -14,6 +14,7 @@
  */
 
 import { BoardRegistry } from './lib/board.js'
+import { checkSkillAssignment, describeViolations, resolveSkillPolicy } from './lib/skill-policy.js'
 import {
 	ShaderModeError,
 	clipLabel,
@@ -93,10 +94,13 @@ function composeWorkerPrompt(input) {
  * @param {object} options - resolved plugin configuration.
  * @param {string} options.workerPreset - preset id every worker is started with.
  * @param {number} options.maxDepth - delegation depth handed to each child.
+ * @param {unknown} options.leadOnlySkills - configured skill policy, or undefined for the default.
  * @param {BoardRegistry} options.boards - the shared board registry.
  * @returns {void}
  */
 export function registerLeadTools(ctx, options, boards) {
+	const skillPolicy = resolveSkillPolicy(options.leadOnlySkills)
+
 	ctx.tools.register(
 		defineShaderTool({
 			name: 'shader_dispatch',
@@ -127,12 +131,17 @@ export function registerLeadTools(ctx, options, boards) {
 						type: 'array',
 						items: { type: 'string' },
 						description:
-							'Skill names the worker must load before starting, in the order it should load them. Use exact catalog names such as `ds-plan-loop` or `shader-single-strict`. At least one is required: a task with no skill assignment is a task whose process you have not decided.',
+							'Skill names the worker must load before starting, in the order it should load them. Use exact catalog names such as `ds-plan-loop` or `shader-team-programmer`. At least one is required: a task with no skill assignment is a task whose process you have not decided.',
 					},
 					acceptance: {
 						type: 'string',
 						description:
 							'How you will judge the result, as checkable statements. "Looks good" is not acceptance; "the chain exits 0 and the package has 304 entries" is.',
+					},
+					allowLeadOnly: {
+						type: 'boolean',
+						description:
+							'Override the skill-role policy for this dispatch. Only set it when you have already done the part of the skill that needs a user — typically requirement freezing — and wrote the result down in `context`. Without it, a dispatch naming a whole-project or orchestrator skill is refused.',
 					},
 					workflow: {
 						type: 'string',
@@ -193,6 +202,16 @@ export function registerLeadTools(ctx, options, boards) {
 				const workflow = optionalString(args, 'workflow')
 				const context = optionalString(args, 'context')
 				const cwd = optionalString(args, 'cwd')
+
+				// A skill written for a whole project, for a user-facing role, or for
+				// orchestrating its own team does not become a worker skill by being
+				// assigned to one. Refuse it and say what to use instead.
+				if (args?.allowLeadOnly !== true) {
+					const violations = checkSkillAssignment(skills, skillPolicy)
+					if (violations.length > 0) {
+						throw new ShaderModeError(describeViolations(violations), 'SKILL_ROLE_CONFLICT')
+					}
+				}
 
 				const board = boards.for(parent.id)
 				// Reserve the board id before starting the child so the prompt can

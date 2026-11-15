@@ -66,22 +66,59 @@ verified independently**, not by what is convenient to describe.
 Every dispatch names the skills the worker must load. This is the part that
 makes shader mode different from ordinary delegation, and it is not optional.
 
-Choosing skills:
+### The rule that matters: a skill must fit the role
 
-- **Process skills** decide *how* the work is done. `ds-plan-loop` for anything
-  touching more than one file, `ds-verify-loop` for anything that must be proven
-  to run, `ds-tdd` for a bug with a cheap test, `ds-review-loop` before shipping.
-- **Domain skills** decide *what correct looks like*. For shader work that is
-  `shader-single` (lean, two artifacts), `shader-single-strict` (evidence-grade,
-  for delivery), `shader-team-architect` (design and contract), and
-  `shader-glsl` (the technique library).
-- **Two or three is the usual number.** A dispatch with six skills is a dispatch
-  whose process you have not decided. A dispatch with none is refused by the
-  tool, on purpose.
+More skills is not better. A skill is written for a *role*, and assigning one
+written for a different role does not make the worker better — it makes the
+worker try to be you, and the failure is quiet: the report comes back looking
+complete.
+
+Three kinds of skill must not go to a worker:
+
+| Kind | Why it breaks | Examples |
+|---|---|---|
+| **Whole-project flows** | They start at requirement freezing, which needs a user to answer. A worker has no user, so it invents the requirements and reports them as settled. | `shader-single`, `shader-single-strict` |
+| **Orchestrators** | They create their own teammates and drive their own task board. A worker that loads one starts a second team underneath you. | `shader-team-lead` |
+| **User-facing roles** | Anything whose job is to talk to the user, freeze requirements, or accept delivery. That is your job. | the S0/S4 hats inside the solo flows |
+
+`shader_dispatch` refuses these by name and tells you what to use instead. The
+override (`allowLeadOnly: true`) exists for the real case where you have
+already done the user-facing part yourself and written it down — not as a way
+to silence the check.
+
+### What to assign instead
+
+The role skills are the ones written for exactly this split:
+
+| Skill | Assign it when |
+|---|---|
+| `shader-team-architect` | The task is turning a visual goal into math, a uniform contract, and a performance budget. Writes `DESIGN.md` + `contract.json`, no shader code. |
+| `shader-team-programmer` | The task is implementing against a frozen contract. Writes `src/` only, self-tests to a frame. |
+| `shader-team-reviewer` | The task is independent verification. Reproduces from disk, runs the gates, reports problems and does not fix them. |
+| `shader-team-scribe` | The task is logging, git, and archiving. |
+| `shader-glsl` | The task needs technique: noise, SDF, domain warping, transitions, Three.js wiring. A library, not a process — safe for any worker. |
+
+Plus the process skills, which are role-neutral and fit any worker:
+`ds-plan-loop` for anything touching more than one file, `ds-verify-loop` for
+anything that must be proven to run, `ds-tdd` for a bug with a cheap test,
+`ds-review-loop` before shipping, `ds-unstick` when a fix has failed twice.
+
+### How many
+
+**Two or three.** One that decides how the work is done, one that decides what
+correct looks like. A dispatch with six skills is a dispatch whose process you
+have not decided. A dispatch with none is refused by the tool, on purpose.
 
 Name them exactly as they appear in the catalog. A worker that cannot find a
 skill is instructed to say so rather than substitute its own process, so a typo
 comes back as a report instead of as silent drift.
+
+### When the catalog has no fitting skill
+
+Say so. Either the task needs a skill that is not installed, or it needs to be
+split differently. Do not reach for a whole-project skill because it is the
+closest match by name — that is exactly the substitution this rule exists to
+prevent.
 
 ## 4. Judge the report, do not accept it
 

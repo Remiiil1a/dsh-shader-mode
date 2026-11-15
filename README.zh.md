@@ -64,9 +64,39 @@ plugin_manager install_bundle --target <本目录的绝对路径>
 | `workflow` | 否 | 项目自己的流程，照抄。 |
 | `context` | 否 | 子智能体查不到的事实。 |
 | `cwd` | 否 | 工作目录，默认当前目录。 |
+| `allowLeadOnly` | 否 | 为这一次派发绕过技能角色策略。 |
 
 技能指派是**写进子智能体提示词的指令**，不是提示。没有技能指派的派发会被拒绝：
 一个你还没决定"怎么做"的任务，是一个你还没规划完的任务。
+
+### 技能必须和角色契合
+
+技能不是越多越好。每个技能是写给**某个角色**的；把写给别的角色的技能派给子智能体，
+不会让它更强，只会让它试图变成主智能体——而且失败是安静的：报告回来时看起来是完整的。
+
+`shader_dispatch` 会按名字拒绝三类：
+
+| 类型 | 为什么坏 | 默认拦截 |
+|---|---|---|
+| 全流程技能 | 从需求冻结开始，而那需要用户回答。子智能体没有用户，于是它自己编一套需求，再当成已确定的上报。 | `shader-single`、`shader-single-strict` |
+| 编排器 | 自己创建 teammate、自己驱动任务板。子智能体加载它，就在主智能体下面又起了一个团队。 | `shader-team-lead` |
+| 面向用户的角色 | 职责是与用户对话、冻结需求、验收交付——那是主智能体的活。 | （由上两类覆盖） |
+
+拒绝信息会点名技能、说明原因、并给出该改用哪个角色技能。`allowLeadOnly: true`
+用于真实场景：主智能体已经自己做完面向用户的那部分并写进了文档——不是用来消音的。
+
+角色技能才是为这种分工写的，它们保持可派发：
+
+| 技能 | 什么时候派 |
+|---|---|
+| `shader-team-architect` | 把视觉目标翻译成数学方案、uniform 契约与性能预算。 |
+| `shader-team-programmer` | 按已冻结的契约实现。 |
+| `shader-team-reviewer` | 独立验证；只报问题，不修。 |
+| `shader-team-scribe` | 日志、git、归档。 |
+| `shader-glsl` | 技法库——噪声、SDF、域扭曲、过渡。任何子智能体都能安全加载。 |
+
+流程类技能（`ds-plan-loop`、`ds-verify-loop`、`ds-tdd`、`ds-review-loop`、
+`ds-unstick`）与角色无关，任何子智能体都适用。
 
 ### `shader_board`
 
@@ -119,6 +149,7 @@ plugin_manager install_bundle --target <本目录的绝对路径>
 |---|---|---|
 | `workerPreset` | `shader-worker` | 每个派发出去的子智能体所用的预设。 |
 | `maxDepth` | `0` | 交给每个子智能体的委派深度。`0` 让子智能体成为叶子，把工作形状的决定权留在主智能体手里。 |
+| `leadOnlySkills` | 内置列表 | 不得派给子智能体的技能。省略则用默认（`shader-single`、`shader-single-strict`、`shader-team-lead`）；给数组则整体替换。 |
 
 ## 测试
 

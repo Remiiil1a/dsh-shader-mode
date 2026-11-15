@@ -23,7 +23,7 @@ export const inject = ['tools', 'subagents']
  * Resolve the row's configuration.
  *
  * @param {unknown} config - the Loader row config.
- * @returns {{ workerPreset: string, maxDepth: number }} the resolved values.
+ * @returns {{ workerPreset: string, maxDepth: number, leadOnlySkills: unknown }} the resolved values.
  */
 export function resolveConfig(config) {
 	const raw = config !== null && typeof config === 'object' ? config : {}
@@ -31,6 +31,9 @@ export function resolveConfig(config) {
 		workerPreset:
 			typeof raw.workerPreset === 'string' && raw.workerPreset !== '' ? raw.workerPreset : 'shader-worker',
 		maxDepth: Number.isSafeInteger(raw.maxDepth) && raw.maxDepth >= 0 ? raw.maxDepth : 0,
+		// Undefined keeps the built-in policy; an array replaces it, so a profile
+		// can add a skill this package has not heard of.
+		leadOnlySkills: Array.isArray(raw.leadOnlySkills) ? raw.leadOnlySkills : undefined,
 	}
 }
 

@@ -13,6 +13,12 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { Board, BoardRegistry } from '../lib/board.js'
+import {
+	DEFAULT_LEAD_ONLY_SKILLS,
+	checkSkillAssignment,
+	describeViolations,
+	resolveSkillPolicy,
+} from '../lib/skill-policy.js'
 import { ShaderModeError, clipLabel, listOr, optionalString, optionalStringArray, requireString, splitFrontmatter } from '../lib/tool.js'
 import { createSkillProvider } from '../skills.js'
 import { workerSectionText } from '../worker.js'
@@ -137,7 +143,7 @@ test('shader_dispatch starts a worker on the configured preset and records the t
 		{
 			title: 'Fix the band',
 			brief: 'Edit translucent.glsl.',
-			skills: ['shader-single-strict', 'ds-verify-loop'],
+			skills: ['shader-team-programmer', 'ds-verify-loop'],
 			acceptance: 'chain exits 0',
 			workflow: 'run the chain, then pack',
 			context: 'build 738 is current',
@@ -147,7 +153,7 @@ test('shader_dispatch starts a worker on the configured preset and records the t
 
 	assert.equal(value.taskId, 'T1')
 	assert.equal(value.childId, 'child-1')
-	assert.deepEqual(value.skills, ['shader-single-strict', 'ds-verify-loop'])
+	assert.deepEqual(value.skills, ['shader-team-programmer', 'ds-verify-loop'])
 
 	const spec = starts[0]
 	assert.equal(spec.provider, 'spawn')
@@ -159,7 +165,7 @@ test('shader_dispatch starts a worker on the configured preset and records the t
 
 	const prompt = spec.request.prompt[0].text
 	assert.match(prompt, /Task T1: Fix the band/)
-	assert.match(prompt, /`shader-single-strict`/)
+	assert.match(prompt, /`shader-team-programmer`/)
 	assert.match(prompt, /`ds-verify-loop`/)
 	assert.match(prompt, /Edit translucent\.glsl\./)
 	assert.match(prompt, /run the chain, then pack/)
@@ -272,4 +278,117 @@ test('every tool declares the schema shape the registry requires', () => {
 		assert.equal(typeof definition.output.render, 'function')
 		assert.equal(typeof definition.execute, 'function')
 	}
+})
+
+test('the default policy blocks whole-project and orchestrator skills', () => {
+	const policy = resolveSkillPolicy(undefined)
+	for (const name of ['shader-single', 'shader-single-strict', 'shader-team-lead']) {
+		assert.ok(policy.has(name), `${name} must be lead-only by default`)
+	}
+	// The role skills are the replacements, so they must stay assignable.
+	for (const name of ['shader-team-architect', 'shader-team-programmer', 'shader-team-reviewer', 'shader-team-scribe', 'shader-glsl']) {
+		assert.equal(policy.has(name), false, `${name} must stay assignable to a worker`)
+	}
+})
+
+test('every default policy entry explains itself and names a replacement', () => {
+	for (const entry of DEFAULT_LEAD_ONLY_SKILLS) {
+		assert.ok(entry.reason.length > 40, `${entry.skill} needs a real reason`)
+		assert.ok(entry.alternative.length > 5, `${entry.skill} needs an alternative`)
+	}
+})
+
+test('the policy accepts a plain name list and a custom table', () => {
+	const fromNames = resolveSkillPolicy(['shader-single'])
+	assert.ok(fromNames.has('shader-single'))
+	assert.equal(fromNames.size, 1)
+	assert.match(fromNames.get('shader-single').reason, /requirement freezing/)
+
+	const custom = resolveSkillPolicy([{ skill: 'my-solo-flow', reason: 'runs alone', alternative: 'my-role-skill' }])
+	assert.ok(custom.has('my-solo-flow'))
+	assert.equal(custom.has('shader-single'), false, 'a custom table replaces the default')
+})
+
+test('checkSkillAssignment reports only the conflicting names', () => {
+	const policy = resolveSkillPolicy(undefined)
+	assert.deepEqual(checkSkillAssignment(['ds-plan-loop', 'shader-glsl'], policy), [])
+	const violations = checkSkillAssignment(['shader-team-programmer', 'shader-single'], policy)
+	assert.equal(violations.length, 1)
+	assert.equal(violations[0].skill, 'shader-single')
+})
+
+test('the rejection names the skill, the reason, and the replacement', () => {
+	const policy = resolveSkillPolicy(undefined)
+	const text = describeViolations(checkSkillAssignment(['shader-single-strict'], policy))
+	assert.match(text, /shader-single-strict/)
+	assert.match(text, /five hats|self-review/i)
+	assert.match(text, /shader-team-reviewer/)
+	assert.match(text, /allowLeadOnly/)
+})
+
+test('shader_dispatch refuses a lead-only skill', async () => {
+	const { ctx, tools, starts } = mockContext()
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 0 }, new BoardRegistry())
+	const dispatch = tools.get('shader_dispatch')
+	await assert.rejects(
+		() =>
+			dispatch.execute(
+				{ title: 't', brief: 'b', acceptance: 'a', skills: ['shader-single'] },
+				exec(),
+			),
+		(error) => error instanceof ShaderModeError && error.code === 'SKILL_ROLE_CONFLICT',
+	)
+	assert.equal(starts.length, 0, 'a refused dispatch must not start a worker')
+})
+
+test('shader_dispatch allows the role skills', async () => {
+	const { ctx, tools, starts } = mockContext()
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 0 }, new BoardRegistry())
+	const dispatch = tools.get('shader_dispatch')
+	const value = await dispatch.execute(
+		{
+			title: 't',
+			brief: 'b',
+			acceptance: 'a',
+			skills: ['shader-team-programmer', 'ds-verify-loop'],
+		},
+		exec(),
+	)
+	assert.equal(value.taskId, 'T1')
+	assert.equal(starts.length, 1)
+})
+
+test('allowLeadOnly overrides the policy for one dispatch', async () => {
+	const { ctx, tools, starts } = mockContext()
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 0 }, new BoardRegistry())
+	const dispatch = tools.get('shader_dispatch')
+	const value = await dispatch.execute(
+		{
+			title: 't',
+			brief: 'b',
+			acceptance: 'a',
+			skills: ['shader-single-strict'],
+			allowLeadOnly: true,
+			context: 'Requirements are frozen in BRIEF.md §1; do not re-freeze them.',
+		},
+		exec(),
+	)
+	assert.equal(value.taskId, 'T1')
+	assert.equal(starts.length, 1)
+})
+
+test('a configured policy replaces the default', async () => {
+	const { ctx, tools } = mockContext()
+	registerLeadTools(
+		ctx,
+		{ workerPreset: 'shader-worker', maxDepth: 0, leadOnlySkills: ['my-solo-flow'] },
+		new BoardRegistry(),
+	)
+	const dispatch = tools.get('shader_dispatch')
+	// The default entry is gone, so it is now allowed.
+	await dispatch.execute({ title: 't', brief: 'b', acceptance: 'a', skills: ['shader-single'] }, exec())
+	await assert.rejects(
+		() => dispatch.execute({ title: 't', brief: 'b', acceptance: 'a', skills: ['my-solo-flow'] }, exec()),
+		(error) => error instanceof ShaderModeError && error.code === 'SKILL_ROLE_CONFLICT',
+	)
 })
