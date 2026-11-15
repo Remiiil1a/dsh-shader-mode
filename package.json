@@ -31,8 +31,8 @@
     "README.zh.md",
     "locale/*.json",
     "skills/*/SKILL.md",
-    "scripts/*.js",
-    "tests/*.js"
+    "tests/*.js",
+    "scripts/*.js"
   ],
   "engines": {
     "node": ">=20",

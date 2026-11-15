@@ -34,15 +34,18 @@
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: shader-lead
-        name: Shader mode (lead)
-        description: Talks to the user, plans the work, and dispatches every task to a worker with an explicit skill assignment.
+        # A custom preset's `name` and `description` are rendered verbatim: the
+        # Web UI only localizes the four shipped presets, by id, from its own
+        # dictionaries. So the Chinese copy lives here rather than in locale/.
+        name: 着色器模式（主）
+        description: 与你交流、规划工作，并把每个任务连同明确的技能指派交给子智能体。
         order: 20
         plugins:
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
               prefix: >-
-                You are the lead of a shader-mode session, powered by the {{model}} model.
+                你是着色器模式会话的主智能体，由 {{model}} 模型驱动。
           - id: shader-mode-lead
             name: dsh-shader-mode
             config:
@@ -110,6 +113,14 @@
                   toolName: subagent
                   modelSelection: true
                   modelDiscovery: true
+              # `tool-workflow` injects `workflowEngine`, which only
+              # `workflow-ptc` provides. Mounting the tool without its provider
+              # leaves the row waiting forever, so the preset reports
+              # "waiting for workflowEngine" and never activates.
+              - id: workflow-ptc
+                name: '@deepseek-ai/dsh-workflow-ptc'
+                config:
+                  provider: spawn
               - id: tool-workflow
                 name: '@deepseek-ai/dsh-tool-workflow'
           - id: tool-ask-user
@@ -130,19 +141,19 @@
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: shader-worker
-        name: Shader mode (worker)
-        description: Executes one dispatched task, loads the skills its lead assigned, and reports back to the lead instead of the user.
+        name: 着色器模式（子）
+        description: 执行一个派发来的任务，加载主智能体指派的技能，并向主智能体回报而不是向用户。
         order: 21
         plugins:
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
               prefix: >-
-                You are a worker in a shader-mode session, powered by the {{model}} model.
+                你是着色器模式会话的子智能体，由 {{model}} 模型驱动。
           - id: shader-mode-worker
             name: dsh-shader-mode/worker
             config:
-              leadName: the lead
+              leadName: 主智能体
           - id: shader-mode-skills
             name: dsh-shader-mode/skills
           - id: agent-instructions
