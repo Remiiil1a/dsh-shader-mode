@@ -1,0 +1,42 @@
+{
+  "name": "dsh-shader-mode",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shader mode: a lead/worker preset pair for shader work. The lead talks to the user and dispatches every task to a worker with an explicit skill assignment; workers never address the user directly.",
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./worker": "./worker.js",
+    "./skills": "./skills.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "index.js",
+    "worker.js",
+    "skills.js",
+    "tools.js",
+    "lib/tool.js",
+    "lib/board.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "README.zh.md",
+    "locale/*.json",
+    "skills/*/SKILL.md",
+    "scripts/*.js",
+    "tests/*.js"
+  ],
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.1"
+  },
+  "license": "Unlicense"
+}

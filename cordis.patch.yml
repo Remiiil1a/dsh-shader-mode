@@ -1,0 +1,215 @@
+# `dsh-shader-mode` composition.
+#
+# Three rows:
+#
+#   1. `preset-shader-lead`    the preset the user selects for a shader session.
+#                              It mounts `dsh-shader-mode` (this package's root
+#                              export) as the lead's dispatch tools.
+#   2. `preset-shader-worker`  the preset every dispatched worker runs on. It
+#                              mounts `dsh-shader-mode/worker` (standing worker
+#                              instructions) and `dsh-shader-mode/skills` (the
+#                              shader-mode skills shipped in this package).
+#   3. `shader-mode`           a Host row that reports the resolved
+#                              configuration. It owns no runtime state; the
+#                              board lives on the lead preset, where the tools
+#                              that write it are mounted.
+#
+# The split is the point: a preset-scoped row is mounted once per preset
+# revision and shared by every agent that selects it, so a worker never sees
+# the lead's tools and a lead never sees the worker's instructions.
+
+- insert:
+    - id: shader-mode
+      name: dsh-shader-mode
+      config:
+        # Preset id the lead's `shader_dispatch` starts every worker with.
+        # Change this only together with the `preset-shader-worker` row below.
+        workerPreset: shader-worker
+        # Delegation depth handed to each worker. 0 makes every worker a leaf,
+        # which keeps the lead in charge of the shape of the work; raise it only
+        # when a task genuinely needs a worker to fan out on its own.
+        maxDepth: 0
+
+    - id: preset-shader-lead
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: shader-lead
+        name: Shader mode (lead)
+        description: Talks to the user, plans the work, and dispatches every task to a worker with an explicit skill assignment.
+        order: 20
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: >-
+                You are the lead of a shader-mode session, powered by the {{model}} model.
+          - id: shader-mode-lead
+            name: dsh-shader-mode
+            config:
+              workerPreset: shader-worker
+              maxDepth: 0
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+            config:
+              applyPatch: false
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: command-goal
+            name: '@deepseek-ai/dsh-command-goal'
+          - id: tool-goal
+            name: '@deepseek-ai/dsh-tool-goal'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+          - id: delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              - id: tool-subagent-control
+                name: '@deepseek-ai/dsh-tool-subagent-control'
+              - id: tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: spawn
+                  toolName: subagent
+                  modelSelection: true
+                  modelDiscovery: true
+              - id: tool-workflow
+                name: '@deepseek-ai/dsh-tool-workflow'
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: present
+            name: '@deepseek-ai/dsh-tool-present'
+
+    - id: preset-shader-worker
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: shader-worker
+        name: Shader mode (worker)
+        description: Executes one dispatched task, loads the skills its lead assigned, and reports back to the lead instead of the user.
+        order: 21
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: >-
+                You are a worker in a shader-mode session, powered by the {{model}} model.
+          - id: shader-mode-worker
+            name: dsh-shader-mode/worker
+            config:
+              leadName: the lead
+          - id: shader-mode-skills
+            name: dsh-shader-mode/skills
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+            config:
+              applyPatch: false
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-jobs
+            name: '@deepseek-ai/dsh-tool-jobs'
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+          - id: delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              - id: tool-subagent-control
+                name: '@deepseek-ai/dsh-tool-subagent-control'
+              - id: tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: spawn
+                  toolName: subagent
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: present
+            name: '@deepseek-ai/dsh-tool-present'
+

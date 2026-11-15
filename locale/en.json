@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Shader mode",
+    "description": "A lead/worker preset pair for shader work: the lead talks to you and dispatches every task to a worker with an explicit skill assignment."
+  }
+}
