@@ -17,9 +17,8 @@ async function load(specifier) {
 }
 
 const lead = await load('dsh-shader-mode')
-assert.equal(typeof lead.apply, 'function', 'lead row must export apply')
-assert.ok(Array.isArray(lead.inject), 'lead row must declare inject')
-assert.deepEqual(lead.inject, ['tools', 'subagents', 'systemPrompt'])
+assert.equal(typeof lead.apply, 'function', 'host row must export apply')
+assert.deepEqual(lead.inject, [], 'the host row registers nothing, so it injects nothing')
 assert.deepEqual(lead.resolveConfig({}), {
 	workerPreset: 'shader-worker',
 	maxDepth: 0,
@@ -44,6 +43,35 @@ assert.equal(lead.resolveConfig({ leadOnlySkills: 'nope' }).leadOnlySkills, unde
 // The guard is on unless explicitly disabled.
 assert.equal(lead.resolveConfig({ remindOnDirectEdit: false }).remindOnDirectEdit, false)
 console.log('ok  dsh-shader-mode          apply + inject + resolveConfig')
+
+// The Host row is global. If it registers a tool, a prompt section, or an
+// event listener, that reaches every session in every mode — which is exactly
+// how a standard-mode session once got `shader_dispatch` and the lead's system
+// prompt. Assert that it registers nothing.
+{
+	const registered = []
+	const ctx = {
+		tools: { register: (definition) => registered.push(`tool:${definition.name}`) },
+		systemPrompt: { section: (section) => registered.push(`section:${section.name}`) },
+		on: (event) => registered.push(`on:${event}`),
+		effect: () => registered.push('effect'),
+		logger: () => ({ info: () => {} }),
+	}
+	lead.apply(ctx, {})
+	assert.deepEqual(registered, [], `the global host row must register nothing, but registered: ${registered.join(', ')}`)
+	console.log('ok  dsh-shader-mode          host row registers nothing (global scope)')
+}
+
+const leadHalf = await load('dsh-shader-mode/lead')
+assert.equal(typeof leadHalf.apply, 'function', 'lead row must export apply')
+assert.deepEqual(leadHalf.inject, ['tools', 'subagents', 'systemPrompt'])
+assert.deepEqual(leadHalf.resolveConfig({}), {
+	workerPreset: 'shader-worker',
+	maxDepth: 0,
+	leadOnlySkills: undefined,
+	remindOnDirectEdit: true,
+})
+console.log('ok  dsh-shader-mode/lead     apply + inject + resolveConfig')
 
 const worker = await load('dsh-shader-mode/worker')
 assert.equal(typeof worker.apply, 'function', 'worker row must export apply')

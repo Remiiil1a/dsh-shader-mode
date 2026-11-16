@@ -7,6 +7,7 @@
   "icon": "./icon.svg",
   "exports": {
     ".": "./index.js",
+    "./lead": "./lead.js",
     "./worker": "./worker.js",
     "./skills": "./skills.js",
     "./locale/*.json": "./locale/*.json",

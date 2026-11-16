@@ -1,20 +1,47 @@
 /**
- * The lead's standing instructions.
+ * The lead half: the tools, the standing instructions, and the guard.
  *
- * These are a system-prompt section, not a skill, and that distinction is the
- * whole point. A skill is loaded on demand: the model has to decide to call
- * `skill` before its rules exist. A session that never calls `skill` never sees
- * them — which is exactly what happened in the first real shader-mode session:
- * the preset was active, `shader_dispatch` was in the tool list, and the lead
- * did all thirteen file edits itself without ever loading the workflow skill.
+ * Everything here is mounted on the `shader-lead` preset and nowhere else. That
+ * scoping is load-bearing: a preset-scoped row is mounted once per preset
+ * revision and shared by the agents that select it, so a standard-mode session
+ * never sees `shader_dispatch` and never gets "you are the lead of a
+ * shader-mode session" in its system prompt.
  *
- * A section is assembled into every model step, so the rule is present whether
- * or not the model chooses to read anything. The skill still exists and still
- * carries the detail; this section carries the part that must not be missable.
+ * An earlier version mounted this on the global Host row instead, and the
+ * result was a standard-mode session that dispatched a worker for a
+ * chrysanthemum-classification task. A global row reaches every session in the
+ * profile; a preset row reaches only the sessions that chose it.
  */
+
+import { createBoards, registerLeadTools } from './tools.js'
+import { mountLeadGuard } from './guard.js'
+
+/** Services this row needs before it can activate. */
+export const inject = ['tools', 'subagents', 'systemPrompt']
 
 /** The section name, stable so a later version can replace it in place. */
 const SECTION_NAME = 'shader-mode:lead'
+
+/**
+ * Resolve the row's configuration.
+ *
+ * @param {unknown} config - the Loader row config.
+ * @returns {{ workerPreset: string, maxDepth: number, leadOnlySkills: unknown, remindOnDirectEdit: boolean }} the resolved values.
+ */
+export function resolveConfig(config) {
+	const raw = config !== null && typeof config === 'object' ? config : {}
+	return {
+		workerPreset:
+			typeof raw.workerPreset === 'string' && raw.workerPreset !== '' ? raw.workerPreset : 'shader-worker',
+		maxDepth: Number.isSafeInteger(raw.maxDepth) && raw.maxDepth >= 0 ? raw.maxDepth : 0,
+		// Undefined keeps the built-in policy; an array replaces it, so a profile
+		// can add a skill this package has not heard of.
+		leadOnlySkills: Array.isArray(raw.leadOnlySkills) ? raw.leadOnlySkills : undefined,
+		// The guard is on by default: the first real session showed that a rule
+		// in a prompt loses to momentum, so the reminder is a mechanism.
+		remindOnDirectEdit: raw.remindOnDirectEdit !== false,
+	}
+}
 
 /**
  * The lead's standing instructions.
@@ -70,4 +97,20 @@ export function mountLeadSection(ctx, config) {
 		order: 110,
 		text: leadSectionText(config),
 	})
+}
+
+/**
+ * Activate the lead half.
+ *
+ * @param {object} ctx - the preset-scoped plugin context.
+ * @param {unknown} config - the Loader row config.
+ * @returns {void}
+ */
+export function apply(ctx, config) {
+	const resolved = resolveConfig(config)
+	const boards = createBoards()
+	ctx.effect(() => () => boards.clear(), 'shader-mode: dispatch board')
+	mountLeadSection(ctx, resolved)
+	registerLeadTools(ctx, resolved, boards)
+	mountLeadGuard(ctx, boards, resolved)
 }

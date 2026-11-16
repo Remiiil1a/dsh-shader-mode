@@ -2,21 +2,29 @@
 #
 # Three rows:
 #
-#   1. `preset-shader-lead`    the preset the user selects for a shader session.
-#                              It mounts `dsh-shader-mode` (this package's root
-#                              export) as the lead's dispatch tools.
-#   2. `preset-shader-worker`  the preset every dispatched worker runs on. It
+#   1. `shader-mode`           a Host row. It is GLOBAL — mounted once for the
+#                              whole profile, outside any preset — so it
+#                              registers nothing. It validates the config and
+#                              logs one line. Anything registered here would
+#                              reach every session in every mode.
+#   2. `preset-shader-lead`    the preset the user selects for a shader session.
+#                              It mounts `dsh-shader-mode/lead`: the dispatch
+#                              tools, the lead's standing instructions, and the
+#                              guard.
+#   3. `preset-shader-worker`  the preset every dispatched worker runs on. It
 #                              mounts `dsh-shader-mode/worker` (standing worker
 #                              instructions) and `dsh-shader-mode/skills` (the
 #                              shader-mode skills shipped in this package).
-#   3. `shader-mode`           a Host row that reports the resolved
-#                              configuration. It owns no runtime state; the
-#                              board lives on the lead preset, where the tools
-#                              that write it are mounted.
 #
 # The split is the point: a preset-scoped row is mounted once per preset
 # revision and shared by every agent that selects it, so a worker never sees
 # the lead's tools and a lead never sees the worker's instructions.
+#
+# ⚠️ The Host row must stay empty. An earlier version mounted the lead's tools
+# on it, and a standard-mode session then had `shader_dispatch` in its tool list
+# and "you are the lead of a shader-mode session" in its system prompt. A global
+# row reaches every session; a preset row reaches only the sessions that chose
+# it.
 
 - insert:
     - id: shader-mode
@@ -47,7 +55,7 @@
               prefix: >-
                 你是着色器模式会话的主智能体，由 {{model}} 模型驱动。
           - id: shader-mode-lead
-            name: dsh-shader-mode
+            name: dsh-shader-mode/lead
             config:
               workerPreset: shader-worker
               maxDepth: 0

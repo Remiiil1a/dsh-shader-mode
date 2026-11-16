@@ -92,16 +92,20 @@ assert.ok(worker, 'the patch declares the shader-worker preset')
 
 const leadNames = lead.config.plugins.map((plugin) => plugin.name)
 const workerNames = worker.config.plugins.map((plugin) => plugin.name)
-assert.ok(leadNames.includes('dsh-shader-mode'), 'the lead mounts the dispatch tools')
-assert.ok(!workerNames.includes('dsh-shader-mode'), 'the worker must not mount the dispatch tools')
+assert.ok(leadNames.includes('dsh-shader-mode/lead'), 'the lead mounts its own half')
+assert.ok(!workerNames.includes('dsh-shader-mode/lead'), 'the worker must not mount the lead half')
 assert.ok(workerNames.includes('dsh-shader-mode/worker'), 'the worker mounts its standing instructions')
 assert.ok(workerNames.includes('dsh-shader-mode/skills'), 'the worker mounts the bundled skills')
 assert.ok(!leadNames.includes('dsh-shader-mode/worker'), 'the lead must not mount worker instructions')
 assert.ok(!leadNames.includes('dsh-shader-mode/skills'), 'the lead must not mount worker skills')
+// The bare package name is the GLOBAL host row. A preset must never mount it,
+// because that row registers nothing and the preset would then have no tools.
+assert.ok(!leadNames.includes('dsh-shader-mode'), 'the lead must mount /lead, not the global row')
+assert.ok(!workerNames.includes('dsh-shader-mode'), 'the worker must mount /worker, not the global row')
 console.log('the two presets carry disjoint shader-mode rows')
 
 // The worker preset must be the one the lead dispatches to.
-const leadRow = lead.config.plugins.find((plugin) => plugin.name === 'dsh-shader-mode')
+const leadRow = lead.config.plugins.find((plugin) => plugin.name === 'dsh-shader-mode/lead')
 assert.equal(leadRow.config.workerPreset, worker.config.id, 'the lead dispatches to the declared worker preset')
 console.log(`the lead dispatches to preset "${leadRow.config.workerPreset}"`)
 

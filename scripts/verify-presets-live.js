@@ -101,6 +101,13 @@ async function mountPreset(ctx, row) {
 		// Only the rows this package owns are mounted here; the Harness rows are
 		// covered by the resolution check and would need the full Host to activate.
 		if (!plugin.name.startsWith('dsh-shader-mode')) continue
+		// The bare package name is the global host row. Mounting it inside a
+		// preset would register nothing and leave the preset without tools.
+		assert.notEqual(
+			plugin.name,
+			'dsh-shader-mode',
+			`preset "${row.config.id}" mounts the global host row; it must mount a scoped subpath`,
+		)
 		const module = await import(plugin.name)
 		assert.equal(typeof module.apply, 'function', `${plugin.name} must export apply`)
 		for (const service of module.inject ?? []) {

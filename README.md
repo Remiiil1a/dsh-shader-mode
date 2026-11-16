@@ -15,24 +15,41 @@ roles is what makes the lead's acceptance check mean something.
 
 The split is enforced by the composition, not by instructions:
 
-| | `shader-lead` | `shader-worker` |
-|---|---|---|
-| `shader_dispatch` / `shader_board` / `shader_route` | yes | **no** |
-| lead standing instructions (system prompt) | yes | **no** |
-| worker standing instructions | **no** | yes |
-| bundled shader-mode skills | no | yes |
-| talks to the user | yes | **no** |
+| | `shader-lead` | `shader-worker` | any other mode |
+|---|---|---|---|
+| `shader_dispatch` / `shader_board` / `shader_route` | yes | **no** | **no** |
+| lead standing instructions (system prompt) | yes | **no** | **no** |
+| worker standing instructions | **no** | yes | **no** |
+| bundled shader-mode skills | no | yes | **no** |
+| talks to the user | yes | **no** | — |
 
 A worker cannot dispatch because the tool is not in its catalog. A lead cannot
 pick up the worker's instructions because they are mounted on the other preset.
+And a session in any other mode sees none of it.
+
+### The Host row registers nothing
+
+This is the one structural rule that must not be broken. The bundle declares a
+global Host row (`shader-mode`) and two preset rows. **A global row reaches every
+session in the profile**; a preset row reaches only the sessions that chose it.
+
+An earlier version mounted the lead's tools and prompt section on the global
+row. The result: a standard-mode session working on a chrysanthemum
+classification project had `shader_dispatch` in its tool list and "you are the
+lead of a shader-mode session" in its system prompt, and dispatched a worker for
+a task that had nothing to do with shaders.
+
+So the global row validates its config and logs one line, and nothing else.
+`scripts/verify-isolation.js` asserts it registers nothing, and asserts the two
+preset halves share no registration.
 
 ### The rule is a prompt section, not a skill
 
-This matters more than it looks. A skill is loaded on demand: the model has to
-decide to call `skill` before its rules exist. The first real shader-mode
-session proved the failure mode — the preset was active, `shader_dispatch` was
-in the tool list, and the lead made 50 `edit` calls and 73 `pwsh` calls without
-ever calling `skill` once. The workflow skill never entered its context.
+A skill is loaded on demand: the model has to decide to call `skill` before its
+rules exist. The first real shader-mode session proved the failure mode — the
+preset was active, `shader_dispatch` was in the tool list, and the lead made 50
+`edit` calls and 73 `pwsh` calls without ever calling `skill` once. The workflow
+skill never entered its context.
 
 So the four rules live in a **system-prompt section** (`shader-mode:lead`),
 assembled into every model step. The skills still carry the detail; the section

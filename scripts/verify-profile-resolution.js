@@ -28,8 +28,9 @@ function resolveFromProfile(specifier) {
 
 const rows = [
 	{ row: 'shader-mode', specifier: 'dsh-shader-mode', export: 'apply' },
-	{ row: 'shader-mode-worker', specifier: 'dsh-shader-mode/worker', export: 'mountWorkerSection' },
-	{ row: 'shader-mode-skills', specifier: 'dsh-shader-mode/skills', export: 'mountSkillProvider' },
+	{ row: 'shader-mode-lead', specifier: 'dsh-shader-mode/lead', export: 'apply' },
+	{ row: 'shader-mode-worker', specifier: 'dsh-shader-mode/worker', export: 'apply' },
+	{ row: 'shader-mode-skills', specifier: 'dsh-shader-mode/skills', export: 'apply' },
 ]
 
 for (const { row, specifier, export: exportName } of rows) {
