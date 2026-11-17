@@ -485,3 +485,74 @@ test('the guard can be turned off', () => {
 	mountLeadGuard(ctx, new BoardRegistry(), { remindOnDirectEdit: false })
 	assert.equal(handlers.length, 0)
 })
+
+test('shader_dispatch refuses a skill the model cannot invoke', async () => {
+	const { ctx, tools, starts } = mockContext()
+	// A registry that reports the skill as present but not model-invocable, which
+	// is what the skill manager produces for every skill it has not enabled.
+	ctx.skills = {
+		async list() {
+			return [
+				{ name: 'shader-team-programmer', invocation: { modelInvocable: true } },
+				{ name: 'shader-team-architect', invocation: { modelInvocable: false } },
+			]
+		},
+	}
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 0 }, new BoardRegistry())
+	const dispatch = tools.get('shader_dispatch')
+
+	await assert.rejects(
+		() =>
+			dispatch.execute(
+				{ title: 't', brief: 'b', acceptance: 'a', skills: ['shader-team-architect'] },
+				exec(),
+			),
+		(error) => error instanceof ShaderModeError && error.code === 'SKILL_NOT_INVOCABLE',
+	)
+	assert.equal(starts.length, 0, 'a refused dispatch must not start a worker')
+})
+
+test('shader_dispatch refuses a skill that is not in the catalog', async () => {
+	const { ctx, tools } = mockContext()
+	ctx.skills = { async list() { return [{ name: 'shader-glsl', invocation: { modelInvocable: true } }] } }
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 0 }, new BoardRegistry())
+	await assert.rejects(
+		() =>
+			tools.get('shader_dispatch').execute(
+				{ title: 't', brief: 'b', acceptance: 'a', skills: ['shader-glsl', 'no-such-skill'] },
+				exec(),
+			),
+		(error) => error instanceof ShaderModeError && error.code === 'SKILL_NOT_INVOCABLE',
+	)
+})
+
+test('shader_dispatch proceeds when every assigned skill is invocable', async () => {
+	const { ctx, tools, starts } = mockContext()
+	ctx.skills = {
+		async list() {
+			return [
+				{ name: 'shader-team-programmer', invocation: { modelInvocable: true } },
+				{ name: 'ds-verify-loop', invocation: { modelInvocable: true } },
+			]
+		},
+	}
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 0 }, new BoardRegistry())
+	const value = await tools.get('shader_dispatch').execute(
+		{ title: 't', brief: 'b', acceptance: 'a', skills: ['shader-team-programmer', 'ds-verify-loop'] },
+		exec(),
+	)
+	assert.equal(value.taskId, 'T1')
+	assert.equal(starts.length, 1)
+})
+
+test('a missing skill registry does not block a dispatch', async () => {
+	const { ctx, tools, starts } = mockContext()
+	// No ctx.skills at all: the check degrades to "cannot verify", not "refuse".
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 0 }, new BoardRegistry())
+	const value = await tools.get('shader_dispatch').execute(
+		{ title: 't', brief: 'b', acceptance: 'a', skills: ['shader-team-programmer'] },
+		exec(),
+	)
+	assert.equal(value.taskId, 'T1')
+	assert.equal(starts.length, 1)
+})

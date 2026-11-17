@@ -88,6 +88,77 @@ function composeWorkerPrompt(input) {
 }
 
 /**
+ * Find assigned skills the model is not allowed to invoke.
+ *
+ * `ctx.skills.list()` returns every skill the session can see, including ones
+ * whose frontmatter sets `disable-model-invocation: true`. The `skill` tool
+ * refuses those, so a worker told to load one fails at its first step. The
+ * skill manager writes that flag into every skill it has not explicitly
+ * enabled, which makes this a live hazard rather than a theoretical one.
+ *
+ * @param {object} ctx - the plugin context.
+ * @param {readonly string[]} skills - the assigned names.
+ * @param {object} agent - the calling agent, used as the skill scope.
+ * @param {AbortSignal} signal - cancellation.
+ * @returns {Promise<Array<{ name: string, reason: 'missing' | 'not-invocable' }>>} the problems.
+ */
+async function findUnloadableSkills(ctx, skills, agent, signal) {
+	// Optional access: a composition without the skill registry should degrade to
+	// "cannot check", not fail the whole lead row.
+	const registry = ctx.get?.('skills') ?? ctx.skills
+	if (registry === undefined) return []
+	let available
+	try {
+		available = await registry.list({ scope: agent, signal })
+	} catch {
+		// A registry that cannot answer is not evidence of a bad assignment.
+		return []
+	}
+	const byName = new Map(available.map((skill) => [skill.name, skill]))
+	const problems = []
+	for (const name of skills) {
+		const skill = byName.get(name)
+		if (skill === undefined) {
+			problems.push({ name, reason: 'missing' })
+			continue
+		}
+		if (skill.invocation?.modelInvocable === false) {
+			problems.push({ name, reason: 'not-invocable' })
+		}
+	}
+	return problems
+}
+
+/**
+ * Render the rejection a lead reads when an assigned skill cannot be loaded.
+ *
+ * @param {readonly { name: string, reason: 'missing' | 'not-invocable' }[]} problems - the problems.
+ * @returns {string} the model-facing message.
+ */
+function describeUnloadable(problems) {
+	const lines = ['This dispatch assigns skills the worker cannot load:', '']
+	for (const problem of problems) {
+		if (problem.reason === 'missing') {
+			lines.push(`- \`${problem.name}\`: not in this session's skill catalog. Check the spelling.`)
+		} else {
+			lines.push(
+				`- \`${problem.name}\`: present but marked \`disable-model-invocation: true\`, so the \`skill\` tool refuses it.`,
+			)
+		}
+	}
+	const blocked = problems.filter((problem) => problem.reason === 'not-invocable')
+	if (blocked.length > 0) {
+		lines.push(
+			'',
+			'That flag is written by the skill manager, which disables every skill it has not explicitly enabled. Enable the skill in the skill manager, or remove the line from its `SKILL.md` frontmatter, then dispatch again.',
+			'',
+			`To unblock every skill this package recommends: \`node scripts/enable-skills.js\` from the package directory.`,
+		)
+	}
+	return lines.join('\n')
+}
+
+/**
  * Register the lead-side tools.
  *
  * @param {object} ctx - the plugin context.
@@ -211,6 +282,16 @@ export function registerLeadTools(ctx, options, boards) {
 					if (violations.length > 0) {
 						throw new ShaderModeError(describeViolations(violations), 'SKILL_ROLE_CONFLICT')
 					}
+				}
+
+				// A skill the model cannot invoke is a skill the worker cannot load.
+				// The skill manager writes `disable-model-invocation: true` into
+				// every skill it has not explicitly enabled, so a name that looks
+				// right in the catalog can still be unloadable. Check before
+				// starting a worker, not after it fails.
+				const unloadable = await findUnloadableSkills(ctx, skills, parent, exec.signal)
+				if (unloadable.length > 0) {
+					throw new ShaderModeError(describeUnloadable(unloadable), 'SKILL_NOT_INVOCABLE')
 				}
 
 				const board = boards.for(parent.id)

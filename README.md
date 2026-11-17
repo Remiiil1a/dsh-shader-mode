@@ -114,7 +114,7 @@ The skill assignment is written into the worker prompt as an instruction, not a
 hint. A dispatch with no skills is refused: a task whose process you have not
 decided is a task you have not finished planning.
 
-### A skill must fit the role
+### A skill must fit the role — and be loadable
 
 More skills is not better. A skill is written for a *role*, and assigning one
 written for a different role does not make the worker better — it makes the
@@ -133,6 +133,30 @@ The refusal names the skill, says why, and names the role skill to use instead.
 `allowLeadOnly: true` overrides it for the real case where the lead has already
 done the user-facing part and written it down — not as a way to silence the
 check.
+
+#### The skill manager blocks most skills
+
+A second, unrelated trap: the skill manager writes
+`disable-model-invocation: true` into **every skill it has not explicitly
+enabled**. A skill with that flag is absent from the model-facing catalog and
+the `skill` tool refuses it, so a worker told to load one fails at its first
+step.
+
+On this machine that blocked 24 of 44 installed skills — including every
+`shader-team-*` role skill this package recommends. The lead could only assign
+the two enabled ones.
+
+`shader_dispatch` now checks before starting a worker and refuses with
+`SKILL_NOT_INVOCABLE`, naming the skill and the fix. To unblock the set shader
+mode needs:
+
+```powershell
+node scripts\enable-skills.js --dry-run   # report first
+node scripts\enable-skills.js             # remove the flag from those skills
+```
+
+It edits only the named skills, only that one line, and writes a `.bak` first.
+Restart the Host afterwards so the catalog is rebuilt.
 
 The role skills are the ones written for exactly this split, and they stay
 assignable:

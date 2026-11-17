@@ -18,7 +18,6 @@ import { mountLeadGuard } from './guard.js'
 
 /** Services this row needs before it can activate. */
 export const inject = ['tools', 'subagents', 'systemPrompt']
-
 /** The section name, stable so a later version can replace it in place. */
 const SECTION_NAME = 'shader-mode:lead'
 
