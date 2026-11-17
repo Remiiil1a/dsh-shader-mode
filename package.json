@@ -13,7 +13,8 @@
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg",
     "./package.json": "./package.json"
-  },  "dsh": {
+  },
+  "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
@@ -35,7 +36,8 @@
     "locale/*.json",
     "skills/*/SKILL.md",
     "tests/*.js",
-    "scripts/*.js"
+    "scripts/*.js",
+    "lib/skill-audit.js"
   ],
   "engines": {
     "node": ">=20",

@@ -15,6 +15,7 @@ import { test } from 'node:test'
 import { Board, BoardRegistry } from '../lib/board.js'
 import { isMutatingTool, mountLeadGuard, reminderText } from '../guard.js'
 import { leadSectionText } from '../lead.js'
+import { compareSkills, describeSkills, readLoadedSkills } from '../lib/skill-audit.js'
 import {
 	DEFAULT_LEAD_ONLY_SKILLS,
 	checkSkillAssignment,
@@ -555,4 +556,130 @@ test('a missing skill registry does not block a dispatch', async () => {
 	)
 	assert.equal(value.taskId, 'T1')
 	assert.equal(starts.length, 1)
+})
+
+test('the lead section tells the lead to say the assignment out loud', () => {
+	const text = leadSectionText({ workerPreset: 'shader-worker' })
+	assert.match(text, /Say the assignment out loud/)
+	assert.match(text, /the user cannot see which skills are doing the work/)
+	// And it must mention that the board reports what was actually loaded.
+	assert.match(text, /actually loaded/)
+})
+
+test('readLoadedSkills reads skill-invocation records from the session log', async () => {
+	const ctx = {
+		sessionQuery: {
+			async open() {
+				return {
+					async read() {
+						return {
+							events: [
+								{ type: 'user/message', data: { message: { source: { kind: 'user' } } } },
+								{ type: 'user/message', data: { message: { source: { kind: 'skill-invocation', name: 'shader-team-programmer' } } } },
+								{ type: 'user/message', data: { message: { source: { kind: 'skill-invocation', name: 'ds-verify-loop' } } } },
+								// A repeat load is not a second skill.
+								{ type: 'user/message', data: { message: { source: { kind: 'skill-invocation', name: 'ds-verify-loop' } } } },
+							],
+						}
+					},
+				}
+			},
+		},
+	}
+	const actual = await readLoadedSkills(ctx, 'child-1')
+	assert.equal(actual.available, true)
+	assert.deepEqual(actual.loaded, ['shader-team-programmer', 'ds-verify-loop'])
+})
+
+test('readLoadedSkills reports unreadable rather than empty', async () => {
+	// No query service at all.
+	assert.deepEqual(await readLoadedSkills({}, 'child-1'), { loaded: [], failed: [], available: false })
+	// A service that throws.
+	const throwing = { sessionQuery: { async open() { throw new Error('gone') } } }
+	assert.deepEqual(await readLoadedSkills(throwing, 'child-1'), { loaded: [], failed: [], available: false })
+	// A service with no usable read face.
+	assert.deepEqual(await readLoadedSkills({ sessionQuery: {} }, 'child-1'), { loaded: [], failed: [], available: false })
+})
+
+test('compareSkills separates skipped from extra', () => {
+	assert.deepEqual(compareSkills(['a', 'b'], ['a', 'b']), { missing: [], extra: [] })
+	assert.deepEqual(compareSkills(['a', 'b'], ['a']), { missing: ['b'], extra: [] })
+	assert.deepEqual(compareSkills(['a'], ['a', 'c']), { missing: [], extra: ['c'] })
+})
+
+test('describeSkills distinguishes assigned from loaded', () => {
+	assert.match(describeSkills(['a'], { loaded: [], available: false }), /could not read/)
+	assert.match(describeSkills(['a'], { loaded: [], available: true }), /has not loaded any yet/)
+	const mixed = describeSkills(['a', 'b'], { loaded: ['a', 'c'], available: true })
+	assert.match(mixed, /skills loaded: a, c/)
+	assert.match(mixed, /assigned but not loaded: b/)
+	assert.match(mixed, /loaded but not assigned: c/)
+})
+
+test('shader_board reports what each worker actually loaded', async () => {
+	const { ctx, tools } = mockContext()
+	ctx.sessionQuery = {
+		async open(sessionId) {
+			return {
+				async read() {
+					return {
+						events:
+							sessionId === 'child-1'
+								? [{ type: 'user/message', data: { message: { source: { kind: 'skill-invocation', name: 'shader-team-programmer' } } } }]
+								: [],
+					}
+				},
+			}
+		},
+	}
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 0 }, new BoardRegistry())
+	await tools.get('shader_dispatch').execute(
+		{ title: 'one', brief: 'b', acceptance: 'a', skills: ['shader-team-programmer'] },
+		exec(),
+	)
+	const board = await tools.get('shader_board').execute({}, exec())
+	assert.equal(board.tasks.length, 1)
+	assert.deepEqual(board.tasks[0].loadedSkills, ['shader-team-programmer'])
+	assert.equal(board.tasks[0].skillsReadable, true)
+})
+
+test('shader_route records the loaded set with the decision', async () => {
+	const { ctx, tools } = mockContext()
+	ctx.sessionQuery = {
+		async open() {
+			return {
+				async read() {
+					return { events: [{ type: 'user/message', data: { message: { source: { kind: 'skill-invocation', name: 'ds-verify-loop' } } } }] }
+				},
+			}
+		},
+	}
+	const boards = new BoardRegistry()
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 0 }, boards)
+	await tools.get('shader_dispatch').execute(
+		{ title: 'one', brief: 'b', acceptance: 'a', skills: ['shader-team-programmer'] },
+		exec(),
+	)
+	const routed = await tools.get('shader_route').execute({ task: 'T1', state: 'reported', report: 'done' }, exec())
+	assert.deepEqual(routed.loadedSkills, ['ds-verify-loop'])
+	assert.equal(routed.skillsReadable, true)
+	// The board keeps it, so a later read does not need the session again.
+	assert.deepEqual(boards.peek('lead-1').find('T1').loadedSkills, ['ds-verify-loop'])
+})
+
+test('shader_dispatch puts the skill assignment on the card', () => {
+	const { ctx, tools } = mockContext()
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 0 }, new BoardRegistry())
+	const dispatch = tools.get('shader_dispatch')
+	const args = { title: 'Fix the band', brief: 'b', acceptance: 'a', skills: ['shader-team-programmer', 'ds-verify-loop'] }
+
+	const pending = dispatch.presentCall(args)
+	assert.equal(pending.card, 'generic')
+	assert.match(pending.title, /Fix the band/)
+	assert.match(pending.content[0].text, /`shader-team-programmer`/)
+	assert.match(pending.content[0].text, /`ds-verify-loop`/)
+
+	const done = dispatch.presentResult(args, { isError: false })
+	assert.match(done.content[0].text, /`shader-team-programmer`/)
+	assert.match(done.content[0].text, /the worker is running/)
 })

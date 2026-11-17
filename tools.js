@@ -15,6 +15,7 @@
 
 import { BoardRegistry } from './lib/board.js'
 import { checkSkillAssignment, describeViolations, resolveSkillPolicy } from './lib/skill-policy.js'
+import { describeSkills, readLoadedSkills } from './lib/skill-audit.js'
 import {
 	ShaderModeError,
 	clipLabel,
@@ -249,12 +250,41 @@ export function registerLeadTools(ctx, options, boards) {
 					].join('\n'),
 				},
 			],
-			presentCall: (args) => ({
-				card: 'generic',
-				title: `Dispatch ${typeof args?.title === 'string' ? args.title : 'task'}`,
-				kind: 'run',
-				rawInput: args,
-			}),
+			// The skill assignment is the part a reader most wants to see, and it
+			// otherwise hides inside the tool arguments. Put it on the card.
+			presentCall: (args) => {
+				const skills = Array.isArray(args?.skills) ? args.skills.filter((name) => typeof name === 'string') : []
+				const title = typeof args?.title === 'string' ? args.title : 'task'
+				return {
+					card: 'generic',
+					title: `Dispatch ${title}`,
+					kind: 'run',
+					content: [
+						{
+							type: 'text',
+							text: skills.length === 0 ? 'skills: (none assigned)' : `skills: ${skills.map((name) => `\`${name}\``).join(', ')}`,
+						},
+					],
+					rawInput: args,
+				}
+			},
+			presentResult: (args, result) => {
+				const skills = Array.isArray(args?.skills) ? args.skills.filter((name) => typeof name === 'string') : []
+				const title = typeof args?.title === 'string' ? args.title : 'task'
+				return {
+					card: 'generic',
+					title: `Dispatched ${title}`,
+					content: [
+						{
+							type: 'text',
+							text: [
+								skills.length === 0 ? 'skills: (none assigned)' : `skills: ${skills.map((name) => `\`${name}\``).join(', ')}`,
+								result.isError ? 'the dispatch was refused' : 'the worker is running',
+							].join('\n'),
+						},
+					],
+				}
+			},
 			async execute(args, exec) {
 				const parent = exec.agent
 				if (parent === undefined) {
@@ -372,6 +402,8 @@ export function registerLeadTools(ctx, options, boards) {
 								title: { type: 'string' },
 								state: { type: 'string' },
 								skills: { type: 'array', items: { type: 'string' } },
+								loadedSkills: { type: 'array', items: { type: 'string' } },
+								skillsReadable: { type: 'boolean' },
 								acceptance: { type: 'string' },
 								workflow: { type: 'string' },
 								report: { type: 'string' },
@@ -389,7 +421,7 @@ export function registerLeadTools(ctx, options, boards) {
 					const lines = [
 						`${task.id} [${task.state}] ${task.title}`,
 						`  worker: ${task.childId}`,
-						`  skills: ${listOr(task.skills)}`,
+						`  ${describeSkills(task.skills, { loaded: task.loadedSkills ?? [], available: task.skillsReadable !== false })}`,
 						`  acceptance: ${task.acceptance}`,
 					]
 					if (task.workflow !== undefined) lines.push(`  workflow: ${task.workflow}`)
@@ -410,13 +442,25 @@ export function registerLeadTools(ctx, options, boards) {
 				const state = optionalString(args, 'state')
 				let tasks = key === undefined ? board.list() : [board.find(key)].filter((task) => task !== undefined)
 				if (state !== undefined) tasks = tasks.filter((task) => task.state === state)
+
+				// Read what each worker actually loaded. This is the difference
+				// between "I told it to use these skills" and "it used them".
+				const audited = await Promise.all(
+					tasks.map(async (task) => ({
+						task,
+						actual: await readLoadedSkills(ctx, task.childId, exec.signal),
+					})),
+				)
+
 				return {
-					tasks: tasks.map((task) => ({
+					tasks: audited.map(({ task, actual }) => ({
 						id: task.id,
 						childId: task.childId,
 						title: task.title,
 						state: task.state,
 						skills: task.skills,
+						loadedSkills: actual.loaded,
+						skillsReadable: actual.available,
 						acceptance: task.acceptance,
 						...(task.workflow === null ? {} : { workflow: task.workflow }),
 						...(task.report === null ? {} : { report: task.report }),
@@ -464,11 +508,23 @@ export function registerLeadTools(ctx, options, boards) {
 					taskId: { type: 'string' },
 					state: { type: 'string' },
 					reworkRounds: { type: 'number' },
+					loadedSkills: { type: 'array', items: { type: 'string' } },
+					skillsReadable: { type: 'boolean' },
 				},
 			},
-			render: (_args, value) => [
-				{ type: 'text', text: `${value.taskId} → ${value.state}${value.reworkRounds > 0 ? ` (rework round ${value.reworkRounds})` : ''}` },
-			],
+			render: (_args, value) => {
+				const lines = [
+					`${value.taskId} → ${value.state}${value.reworkRounds > 0 ? ` (rework round ${value.reworkRounds})` : ''}`,
+				]
+				if (value.skillsReadable === true) {
+					lines.push(
+						value.loadedSkills.length === 0
+							? 'the worker loaded no skills'
+							: `the worker loaded: ${value.loadedSkills.join(', ')}`,
+					)
+				}
+				return [{ type: 'text', text: lines.join('\n') }]
+			},
 			async execute(args, exec) {
 				const parent = exec.agent
 				if (parent === undefined) {
@@ -490,7 +546,18 @@ export function registerLeadTools(ctx, options, boards) {
 					if (state === 'rework' || state === 'dropped') requireString(args, 'note')
 					board.setState(task, state, optionalString(args, 'note'))
 				}
-				return { taskId: task.id, state: task.state, reworkRounds: task.reworkRounds }
+				// Record what the worker actually loaded alongside the decision, so
+				// the board answers "did it use the skills I assigned" later.
+				const actual = await readLoadedSkills(ctx, task.childId, exec.signal)
+				task.loadedSkills = actual.loaded
+				task.skillsReadable = actual.available
+				return {
+					taskId: task.id,
+					state: task.state,
+					reworkRounds: task.reworkRounds,
+					loadedSkills: actual.loaded,
+					skillsReadable: actual.available,
+				}
 			},
 		}),
 	)

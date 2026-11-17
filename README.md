@@ -178,8 +178,32 @@ Reads the dispatch board: every task, its skills, its acceptance, and what came
 back. Use it before a follow-up so you restate the task instead of re-deriving
 it, and before reporting to the user so you do not claim work that is still open.
 
+It reports **two** skill facts per task, and the difference matters:
+
+- `skills` — what you assigned.
+- `loadedSkills` — what the worker actually loaded, read from the child session's
+  log. The Harness records each `skill` call as a user message whose source is
+  `{ kind: 'skill-invocation', name }`, so this is a fact rather than a guess.
+
+A worker that skipped an assigned skill shows up as `assigned but not loaded`.
+`skillsReadable: false` means the session could not be read at all — which is
+different from "loaded nothing", and is reported as such.
+
 The board is a cache. If it is empty but workers exist, the Host restarted —
 read the child sessions instead of assuming nothing was dispatched.
+
+### Seeing the assignment in the conversation
+
+The skill assignment otherwise lives only inside a tool call, which makes it a
+black box. Two things surface it:
+
+- The `shader_dispatch` card shows the assigned skills in both its pending and
+  completed states, so the assignment is visible in the transcript without
+  expanding the arguments.
+- The lead's standing instructions require one line in the reply naming the task
+  and its skills — `T1 派给 shader-team-programmer + ds-verify-loop`. That is a
+  reporting duty, not a formality: it is how the user audits the lead's
+  judgement.
 
 ### `shader_route`
 
