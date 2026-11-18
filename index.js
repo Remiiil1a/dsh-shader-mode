@@ -31,7 +31,7 @@ export function resolveConfig(config) {
 	return {
 		workerPreset:
 			typeof raw.workerPreset === 'string' && raw.workerPreset !== '' ? raw.workerPreset : 'shader-worker',
-		maxDepth: Number.isSafeInteger(raw.maxDepth) && raw.maxDepth >= 0 ? raw.maxDepth : 0,
+		maxDepth: Number.isSafeInteger(raw.maxDepth) && raw.maxDepth >= 1 ? raw.maxDepth : 1,
 		// Undefined keeps the built-in policy; an array replaces it, so a profile
 		// can add a skill this package has not heard of.
 		leadOnlySkills: Array.isArray(raw.leadOnlySkills) ? raw.leadOnlySkills : undefined,

@@ -21,7 +21,7 @@ assert.equal(typeof lead.apply, 'function', 'host row must export apply')
 assert.deepEqual(lead.inject, [], 'the host row registers nothing, so it injects nothing')
 assert.deepEqual(lead.resolveConfig({}), {
 	workerPreset: 'shader-worker',
-	maxDepth: 0,
+	maxDepth: 1,
 	leadOnlySkills: undefined,
 	remindOnDirectEdit: true,
 })
@@ -33,7 +33,7 @@ assert.deepEqual(lead.resolveConfig({ workerPreset: 'custom', maxDepth: 2 }), {
 })
 assert.deepEqual(lead.resolveConfig({ workerPreset: '', maxDepth: -1 }), {
 	workerPreset: 'shader-worker',
-	maxDepth: 0,
+	maxDepth: 1,
 	leadOnlySkills: undefined,
 	remindOnDirectEdit: true,
 })
@@ -67,7 +67,7 @@ assert.equal(typeof leadHalf.apply, 'function', 'lead row must export apply')
 assert.deepEqual(leadHalf.inject, ['tools', 'subagents', 'systemPrompt'])
 assert.deepEqual(leadHalf.resolveConfig({}), {
 	workerPreset: 'shader-worker',
-	maxDepth: 0,
+	maxDepth: 1,
 	leadOnlySkills: undefined,
 	remindOnDirectEdit: true,
 })

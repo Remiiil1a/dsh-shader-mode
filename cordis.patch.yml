@@ -33,10 +33,11 @@
         # Preset id the lead's `shader_dispatch` starts every worker with.
         # Change this only together with the `preset-shader-worker` row below.
         workerPreset: shader-worker
-        # Delegation depth handed to each worker. 0 makes every worker a leaf,
-        # which keeps the lead in charge of the shape of the work; raise it only
-        # when a task genuinely needs a worker to fan out on its own.
-        maxDepth: 0
+        # Delegation depth handed to each worker. 1 lets the lead start direct
+        # children, which is what a dispatch is. 0 does NOT mean "leaf": the
+        # child depth is parentDepth + 1, so 0 rejects every dispatch with
+        # SubagentDepthError. Raise it only when a worker must fan out itself.
+        maxDepth: 1
 
     - id: preset-shader-lead
       name: '@deepseek-ai/dsh-agent-preset'
@@ -58,7 +59,7 @@
             name: dsh-shader-mode/lead
             config:
               workerPreset: shader-worker
-              maxDepth: 0
+              maxDepth: 1
               # Skills that must not be assigned to a worker, because they are
               # written for a different role: a whole-project flow that starts
               # by freezing requirements with a user, or an orchestrator that

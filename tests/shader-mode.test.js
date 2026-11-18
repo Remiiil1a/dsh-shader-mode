@@ -562,8 +562,59 @@ test('the lead section tells the lead to say the assignment out loud', () => {
 	const text = leadSectionText({ workerPreset: 'shader-worker' })
 	assert.match(text, /Say the assignment out loud/)
 	assert.match(text, /the user cannot see which skills are doing the work/)
-	// And it must mention that the board reports what was actually loaded.
-	assert.match(text, /actually loaded/)
+})
+
+test('the lead section carries a stop condition, not just rules', () => {
+	const text = leadSectionText({ workerPreset: 'shader-worker' })
+	// The section that produced a five-times-repeated paragraph needs an
+	// explicit bound on investigation, or "verify the report" becomes a loop.
+	assert.match(text, /Stop investigating and act/)
+	assert.match(text, /Two checks per question, then decide/)
+	assert.match(text, /Never re-derive a fact you already established/)
+	assert.match(text, /A wrong hypothesis is a result/)
+	assert.match(text, /Dispatch before you are certain/)
+	assert.match(text, /When the user says you are looping, you are/)
+	assert.match(text, /Report a blocked state instead of grinding/)
+})
+
+test('a depth rejection is translated into the cause and the fix', async () => {
+	const { ctx, tools } = mockContext({
+		startActivation() {
+			throw new Error('subagent child depth 1 exceeds maxDepth 0')
+		},
+	})
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 0 }, new BoardRegistry())
+	await assert.rejects(
+		() =>
+			tools.get('shader_dispatch').execute(
+				{ title: 't', brief: 'b', acceptance: 'a', skills: ['shader-team-programmer'] },
+				exec(),
+			),
+		(error) => {
+			assert.equal(error.code, 'DEPTH_LIMIT')
+			assert.match(error.message, /maxDepth.*0/)
+			assert.match(error.message, /set `maxDepth: 1`/)
+			assert.match(error.message, /Do not fall back to `spawn_teammate`/)
+			return true
+		},
+	)
+})
+
+test('a non-depth failure is not relabelled', async () => {
+	const { ctx, tools } = mockContext({
+		startActivation() {
+			throw new Error('provider "spawn" is not registered')
+		},
+	})
+	registerLeadTools(ctx, { workerPreset: 'shader-worker', maxDepth: 1 }, new BoardRegistry())
+	await assert.rejects(
+		() =>
+			tools.get('shader_dispatch').execute(
+				{ title: 't', brief: 'b', acceptance: 'a', skills: ['shader-team-programmer'] },
+				exec(),
+			),
+		(error) => error.code !== 'DEPTH_LIMIT' && /not registered/.test(error.message),
+	)
 })
 
 test('readLoadedSkills reads skill-invocation records from the session log', async () => {

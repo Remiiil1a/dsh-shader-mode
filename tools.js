@@ -160,6 +160,41 @@ function describeUnloadable(problems) {
 }
 
 /**
+ * Start a worker, translating the depth rejection into something actionable.
+ *
+ * `maxDepth` is an absolute cap on the child's depth, and the child's depth is
+ * `parentDepth + 1`. So `maxDepth: 0` does not mean "a leaf worker" — it
+ * rejects every dispatch, because the first child is already depth 1. That
+ * distinction cost a real session: the lead was refused, could not tell why,
+ * and fell back to `spawn_teammate` without knowing the cause.
+ *
+ * @param {object} ctx - the plugin context.
+ * @param {object} spec - the activation spec.
+ * @returns {Promise<object>} the activation.
+ * @throws {ShaderModeError} with the cause and the fix when the depth cap rejects.
+ */
+async function startWorker(ctx, spec) {
+	try {
+		return await ctx.subagents.startActivation(spec)
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error)
+		if (!/depth/i.test(message)) throw error
+		throw new ShaderModeError(
+			[
+				`The delegation depth cap rejected this dispatch: ${message}`,
+				'',
+				`This session's \`maxDepth\` is ${spec.request.maxDepth}. A child's depth is the parent's depth plus one, so a cap of 0 rejects every dispatch — it does not mean "a leaf worker".`,
+				'',
+				'Fix: set `maxDepth: 1` (or higher) on the `shader-mode-lead` row in the profile patch, then restart the Host. 1 permits direct children, which is what a dispatch is.',
+				'',
+				'Do not fall back to `spawn_teammate` to work around this: that path is not the shader-mode worker preset, so the worker will not get the standing instructions or the bundled skills.',
+			].join('\n'),
+			'DEPTH_LIMIT',
+		)
+	}
+}
+
+/**
  * Register the lead-side tools.
  *
  * @param {object} ctx - the plugin context.
@@ -330,7 +365,7 @@ export function registerLeadTools(ctx, options, boards) {
 				const taskId = `T${board.counter + 1}`
 				const prompt = composeWorkerPrompt({ title, brief, skills, acceptance, workflow, context, taskId })
 
-				const activation = await ctx.subagents.startActivation({
+				const activation = await startWorker(ctx, {
 					provider: PROVIDER,
 					label: clipLabel(`${taskId} ${title}`),
 					request: {

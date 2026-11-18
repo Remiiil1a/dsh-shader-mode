@@ -252,9 +252,26 @@ The `shader-mode` row in `cordis.patch.yml`:
 | Field | Default | Meaning |
 |---|---|---|
 | `workerPreset` | `shader-worker` | Preset every dispatched worker runs on. |
-| `maxDepth` | `0` | Delegation depth handed to each worker. `0` makes workers leaves, which keeps the lead in charge of the shape of the work. |
+| `maxDepth` | `1` | Delegation depth cap handed to each worker. **`1` permits direct children, which is what a dispatch is.** `0` does *not* mean "a leaf worker": a child's depth is the parent's depth plus one, so `0` rejects every dispatch with `SubagentDepthError`. |
 | `leadOnlySkills` | built-in list | Skills that must not be assigned to a worker. Omit to keep the default (`shader-single`, `shader-single-strict`, `shader-team-lead`); supply an array to replace it. |
 | `remindOnDirectEdit` | `true` | Attach a corrective note when the lead edits a file or runs a command itself. |
+
+### The stop condition
+
+The lead's section carries a second block of rules, and it exists because the
+first version did not have one. A session with "judge the report, check the
+evidence" and no bound on investigation produced the same paragraph five times
+and had to be interrupted by hand three times.
+
+The rules that prevent it:
+
+- **Two checks per question, then decide.** A third confirmation is a loop.
+- **Never re-derive a fact you already established.**
+- **A wrong hypothesis is a result** — say it was wrong and move on.
+- **Dispatch before you are certain** — a worker can investigate in parallel.
+- **When the user says you are looping, you are.** Stop that line immediately.
+- **Report a blocked state instead of grinding.** "I need this one fact from
+  you" is a success; an hour of silent verification is not.
 
 ## Tests
 
