@@ -577,6 +577,30 @@ test('the lead section carries a stop condition, not just rules', () => {
 	assert.match(text, /Report a blocked state instead of grinding/)
 })
 
+test('the lead section treats a revert as a task with a check', () => {
+	const text = leadSectionText({ workerPreset: 'shader-worker' })
+	assert.match(text, /A revert is a task with a check/)
+	assert.match(text, /git revert <sha>/)
+	// The check must be a comparison against the target, not a reading of the diff.
+	assert.match(text, /the diff against the target commit is empty/)
+	assert.match(text, /fingerprint/)
+	// And it must say what a revert may not drop.
+	assert.match(text, /What must survive/)
+	assert.match(text, /"Reverted" is not a state anyone can check/)
+})
+
+test('the dispatch skill documents the revert check', async () => {
+	const provider = createSkillProvider()
+	const listed = await provider.list()
+	const dispatch = listed.candidates.find((candidate) => candidate.name === 'shader-mode-dispatch')
+	assert.ok(dispatch, 'the dispatch skill is bundled')
+	const full = await provider.get(dispatch)
+	assert.match(full.content, /Reverting is a task, and it has a check/)
+	assert.match(full.content, /git revert <sha>/)
+	assert.match(full.content, /Byte equality/)
+	assert.match(full.content, /the project's own fingerprint/i)
+})
+
 test('a depth rejection is translated into the cause and the fix', async () => {
 	const { ctx, tools } = mockContext({
 		startActivation() {

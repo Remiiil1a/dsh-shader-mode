@@ -273,6 +273,26 @@ The rules that prevent it:
 - **Report a blocked state instead of grinding.** "I need this one fact from
   you" is a success; an hour of silent verification is not.
 
+### A revert is a task with a check
+
+"Revert it" is the request most likely to be reported done and not be done. A
+worker that edits files back by hand, reverts the wrong commit, or reverts and
+then re-applies half the change will report success, and the tree will be wrong
+in a way nobody notices until the next batch.
+
+So the lead is told never to dispatch a revert as an intent. A revert dispatch
+names:
+
+- **The commit**, via `git revert <sha>` — not "undo the last change".
+- **The check**, as a comparison against the target state: the diff against the
+  target commit is empty for the covered paths, and the project's own
+  fingerprint (package size, entry count, hash) reproduces the target build's
+  values.
+- **What must survive** — the later, unrelated fixes a revert must not drop.
+
+"Reverted" is not a state anyone can check. "The diff against `a0f071c` is empty
+and the MD5 matches the b752 snapshot" is.
+
 ## Tests
 
 ```powershell

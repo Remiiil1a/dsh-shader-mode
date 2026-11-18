@@ -79,6 +79,55 @@ Prior decisions, what earlier tasks established, the user's stated preference,
 the thing that was already tried and rejected. Keep it to facts. A worker that
 receives your reasoning will argue with it instead of doing the task.
 
+## Reverting is a task, and it has a check
+
+"Revert it" is the request most likely to be reported done and not be done. A
+worker that edits files back by hand, or that reverts the wrong commit, or that
+reverts and then re-applies half the change, will report success — and the tree
+will be wrong in a way nobody notices until the next batch.
+
+So a revert dispatch must name the mechanism and the check, not the intent.
+
+**Name the commit.** `git revert <sha>` on a specific commit, not "undo the last
+change". If the project has a convention for it, quote that convention — many
+projects record reverts as `git -C <repo> revert <sha>` in their own log.
+
+**Name the check.** A revert is verified by comparing against the target state,
+not by reading the diff:
+
+- **Byte equality.** `git diff <target>..HEAD -- <paths>` must be empty for the
+  files the revert covers. This is the check that catches a hand-edited revert.
+- **The project's own fingerprint.** If the project records a package size, an
+  entry count, or a hash per build, the reverted tree must reproduce the target
+  build's values — not merely "look right".
+- **The chain.** The project's own verification must pass, and its readings must
+  match the target build's readings.
+
+**Say what must not change.** A revert that also drops an unrelated later fix is
+a different change. List the commits or files that must survive.
+
+Workable:
+
+```
+title: Revert SMAA to b752's known-good state
+brief: |
+  Revert the SMAA option-layer changes with `git -C Firmament revert <sha>`,
+  do not hand-edit the files back.
+
+  The four SMAA files are byte-identical to b752 already, so the revert covers
+  the option layer only. Do not touch the end-portal work or the LIGHT_BLEED
+  removal — those are later, unrelated fixes and must survive.
+skills: [shader-team-scribe, ds-verify-loop]
+acceptance: |
+  `git diff a0f071c..HEAD -- shaders/composite4.fsh shaders/composite5.fsh
+  shaders/composite6.fsh shaders/lib/smaa.glsl` is empty.
+  The package is 304 entries and its MD5 equals the b752 snapshot's.
+  The full chain exits 0 with the same reading counts as b752.
+```
+
+The acceptance is the whole point. "Reverted" is not a state anyone can check;
+"the diff against the target is empty and the hash matches" is.
+
 ## Two dispatches, side by side
 
 **Too thin:**
